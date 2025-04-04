@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Mini Navegador</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: sans-serif;
+      background-color: #f9f9f9;
+    }
+    .toolbar {
+      display: flex;
+      padding: 10px;
+      background-color: #282c34;
+      color: white;
+      align-items: center;
+    }
+    .toolbar input {
+      flex-grow: 1;
+      padding: 8px;
+      font-size: 16px;
+      border: none;
+      border-radius: 4px;
+      margin-right: 8px;
+    }
+    .toolbar button {
+      padding: 8px 12px;
+      font-size: 16px;
+      background-color: #61dafb;
+      color: #000;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      margin-right: 5px;
+    }
+    .tabs {
+      display: flex;
+      background-color: #f0f0f0;
+      padding: 5px;
+      overflow-x: auto;
+    }
+    .tab {
+      background-color: #ddd;
+      padding: 5px 10px;
+      margin-right: 5px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    .tab.active {
+      background-color: #bbb;
+    }
+    iframe {
+      width: 100%;
+      height: calc(100vh - 106px);
+      border: none;
+    }
+    .suggestions {
+      position: absolute;
+      background-color: white;
+      color: black;
+      width: calc(100% - 200px);
+      margin: 0 10px;
+      z-index: 999;
+      border: 1px solid #ccc;
+      border-top: none;
+      display: none;
+    }
+    .suggestion-item {
+      padding: 8px;
+      cursor: pointer;
+    }
+    .suggestion-item:hover {
+      background-color: #f0f0f0;
+    }
+  </style>
+</head>
+<body>
+  <div class="toolbar">
+    <div style="position: relative; width: 100%; display: flex;">
+      <input type="text" id="urlInput" placeholder="Digite o nome do site ou pesquisa..." oninput="mostrarSugestoes()" onkeydown="selecionarComTecla(event)">
+      <div id="suggestions" class="suggestions"></div>
+    </div>
+    <button onclick="navegar()">Ir</button>
+    <button onclick="adicionarAba()">Nova Aba</button>
+    <button onclick="adicionarAosFavoritos()">Favorito</button>
+  </div>
+  <div class="tabs" id="abas"></div>
+  <iframe id="browserFrame" src="about:blank"></iframe>
+
+  <script>
+    const domíniosSugeridos = ['.com', '.org', '.net', '.gov', '.edu', '.br'];
+    const sugestoesFixas = ['google.com', 'youtube.com', 'facebook.com', 'wikipedia.org', 'twitter.com'];
+    const favoritos = [];
+    const abas = [];
+    let abaAtiva = -1;
+
+    function navegar() {
+      let entrada = document.getElementById('urlInput').value.trim();
+
+      if (!entrada.startsWith('http://') && !entrada.startsWith('https://')) {
+        if (!entrada.includes('.')) {
+          testarDominios(entrada);
+          return;
+        } else {
+          entrada = 'https://' + entrada;
+        }
+      }
+
+      // Evita carregar sites restritos no iframe, como o YouTube
+      if (entrada.includes("youtube.com") || entrada.includes("facebook.com")) {
+        window.open(entrada, "_blank");
+      } else {
+        document.getElementById('browserFrame').src = entrada;
+      }
+      if (abaAtiva >= 0) abas[abaAtiva].url = entrada;
+      esconderSugestoes();
+    }
+
+    async function testarDominios(nomeBase) {
+      for (let dominio of domíniosSugeridos) {
+        let tentativa = 'https://' + nomeBase + dominio;
+        try {
+          const response = await fetch(tentativa, { method: 'HEAD', mode: 'no-cors' });
+          document.getElementById('browserFrame').src = tentativa;
+          return;
+        } catch (e) {
+          continue;
+        }
+      }
+      alert('Não foi possível encontrar o site.');
+    }
+
+    function mostrarSugestoes() {
+      const input = document.getElementById('urlInput');
+      const valor = input.value.toLowerCase();
+      const caixa = document.getElementById('suggestions');
+      caixa.innerHTML = '';
+      if (!valor) {
+        caixa.style.display = 'none';
+        return;
+      }
+      const filtradas = sugestoesFixas.concat(favoritos).filter(s => s.toLowerCase().includes(valor));
+      filtradas.forEach(site => {
+        const item = document.createElement('div');
+        item.className = 'suggestion-item';
+        item.textContent = site;
+        item.onclick = () => {
+          input.value = site;
+          navegar();
+        };
+        caixa.appendChild(item);
+      });
+      caixa.style.display = filtradas.length ? 'block' : 'none';
+    }
+
+    function esconderSugestoes() {
+      document.getElementById('suggestions').style.display = 'none';
+    }
+
+    function selecionarComTecla(event) {
+      if (event.key === 'Enter') {
+        navegar();
+      }
+    }
+
+    function adicionarAba() {
+      abas.push({ url: 'about:blank' });
+      abaAtiva = abas.length - 1;
+      atualizarAbas();
+      document.getElementById('browserFrame').src = 'about:blank';
+      document.getElementById('urlInput').value = '';
+    }
+
+    function atualizarAbas() {
+      const cont = document.getElementById('abas');
+      cont.innerHTML = '';
+      abas.forEach((aba, i) => {
+        const tab = document.createElement('div');
+        tab.className = 'tab' + (i === abaAtiva ? ' active' : '');
+        tab.textContent = aba.url.includes('http') ? aba.url.replace('https://','').split('/')[0] : 'Nova Aba';
+        tab.onclick = () => {
+          abaAtiva = i;
+          document.getElementById('browserFrame').src = abas[i].url;
+          document.getElementById('urlInput').value = abas[i].url.replace('https://','');
+          atualizarAbas();
+        };
+        cont.appendChild(tab);
+      });
+    }
+
+    function adicionarAosFavoritos() {
+      let atual = document.getElementById('browserFrame').src;
+      if (!favoritos.includes(atual)) {
+        favoritos.push(atual);
+        alert('Adicionado aos favoritos: ' + atual);
+      }
+    }
+  </script>
+</body>
+</html>
